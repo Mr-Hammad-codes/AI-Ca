@@ -1,0 +1,12 @@
+Set-Content -Path .gitignore -Value @"
+**/.env
+**/.env.*
+.env*
+*.pem
+**/__pycache__/
+*.py[cod]
+**/venv/
+**/env/
+**/node_modules/
+.next/
+"@

@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Fallback for older Tailwind versions if the import above warns */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  /* Hex codes for Tailwind's slate-50 and slate-900 */
+  background-color: #f8fafc;
+  color: #0f172a;
+}
