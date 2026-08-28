@@ -1,61 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Card, Title, Text, Button, Divider, Badge, LineChart, DonutChart } from "@tremor/react";
+import { Card, Title, Text, Button, Divider, Badge } from "@tremor/react";
 import jsPDF from "jspdf";
-
-interface ESGMetrics {
-  hardware_co2: number;
-  travel_co2: number;
-  cloud_co2: number;
-  logistics_co2: number;
-  total_co2: number;
-}
-
-interface TemporalAccrual {
-  billing_cadence_days: number;
-  accrual_status: string;
-  projected_next_billing: string;
-  eom_liability_flag: boolean;
-}
-
-interface AuditRecord {
-  vendor_name: string;
-  currency?: string;
-  reported_total: number;
-  calculated_total: number;
-  tax_amount: number;
-  is_compliant: boolean;
-  status: string;
-  po_status: string;
-  esg_metrics: ESGMetrics;
-  temporal_accrual: TemporalAccrual;
-  policy_violations: string[];
-  risk_score: number;
-  fraud_flags: string[];
-  approval_state: string;
-  prev_hash: string;
-  block_hash: string;
-  payment_strategy: string;
-  vendor_email_draft: string;
-}
+import { useAudit } from "./context";
+import { BloomBackground } from "./components/ui/bloom-animation-background";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
-  const [customPolicy, setCustomPolicy] = useState<string>(""); 
   const [loading, setLoading] = useState<boolean>(false);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
-  
-  const [result, setResult] = useState<AuditRecord | null>(null);
-  const [history, setHistory] = useState<AuditRecord[]>([]);
   const [error, setError] = useState<string>("");
+  
+  const { customPolicy, result, setResult, history, setHistory, chatLog, setChatLog } = useAudit();
 
-  // Chat State
   const [chatQuestion, setChatQuestion] = useState<string>("");
-  const [chatLog, setChatLog] = useState<{ sender: string; text: string }[]>([]);
   const [chatLoading, setChatLoading] = useState<boolean>(false);
 
-  // Rollback State
   const [rollbackReason, setRollbackReason] = useState<string>("");
   const [rollbackMsg, setRollbackMsg] = useState<string>("");
 
@@ -65,6 +26,13 @@ export default function Home() {
       setError("");
       setChatLog([]);
     }
+  };
+
+  const clearSession = () => {
+    setResult(null);
+    setFile(null);
+    setChatLog([]);
+    setError("");
   };
 
   const handleUpload = async (runAgent: boolean) => {
@@ -95,7 +63,7 @@ export default function Home() {
       const newRecord = data.audit_record;
       
       setResult(newRecord);
-      setHistory((prev) => [...prev, newRecord]);
+      setHistory([...history, newRecord]);
       setChatLog([{ sender: "AI", text: `Connected to document context for ${newRecord.vendor_name}. Ask me anything about this audit!` }]);
       
     } catch (err) {
@@ -113,7 +81,9 @@ export default function Home() {
     if (!chatQuestion.trim() || !result) return;
     const userQ = chatQuestion;
     setChatQuestion("");
-    setChatLog((prev) => [...prev, { sender: "User", text: userQ }]);
+    
+    const updatedChat = [...chatLog, { sender: "User", text: userQ }];
+    setChatLog(updatedChat);
     setChatLoading(true);
 
     try {
@@ -123,9 +93,9 @@ export default function Home() {
         body: JSON.stringify({ question: userQ, vendor_name: result.vendor_name }),
       });
       const data = await res.json();
-      setChatLog((prev) => [...prev, { sender: "AI", text: data.answer }]);
+      setChatLog([...updatedChat, { sender: "AI", text: data.answer }]);
     } catch {
-      setChatLog((prev) => [...prev, { sender: "AI", text: "Error connecting to conversational context engine." }]);
+      setChatLog([...updatedChat, { sender: "AI", text: "Error connecting to conversational context engine." }]);
     } finally {
       setChatLoading(false);
     }
@@ -194,142 +164,103 @@ export default function Home() {
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(30, 64, 175); 
-    doc.text("--- FINANCIAL & ESG METRICS ---", 20, 56);
+    doc.text("--- FINANCIAL, ESG & TREASURY METRICS ---", 20, 56);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(15, 23, 42);
     doc.text(`Reported Total: ${result.currency} ${result.reported_total.toFixed(2)}`, 20, 64);
     doc.text(`Calculated Engine: ${result.currency} ${result.calculated_total.toFixed(2)}`, 20, 70);
     doc.text(`Scope 3 Carbon Footprint: ${result.esg_metrics.total_co2} kg CO2e`, 20, 76);
     doc.text(`Temporal Accrual Status: ${result.temporal_accrual.accrual_status}`, 20, 82);
+    doc.text(`Treasury Strategy: ${result.treasury_optimization.recommendation}`, 20, 88);
+    doc.text(`Projected Yield Benefit: ${result.currency} ${result.treasury_optimization.projected_net_benefit.toFixed(2)}`, 20, 94);
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(6, 78, 59); 
-    doc.text("--- CRYPTOGRAPHIC PROOF ---", 20, 96);
+    doc.text("--- CRYPTOGRAPHIC PROOF ---", 20, 108);
     doc.setFontSize(8);
     doc.setFont("courier", "normal"); 
     doc.setTextColor(71, 85, 105); 
-    doc.text(`Prev Hash: ${result.prev_hash}`, 20, 104);
-    doc.text(`Block Hash: ${result.block_hash}`, 20, 112);
+    doc.text(`Prev Hash: ${result.prev_hash}`, 20, 116);
+    doc.text(`Block Hash: ${result.block_hash}`, 20, 124);
 
     doc.save(`Enterprise_Audit_${result.vendor_name.replace(/\s+/g, '_')}.pdf`);
   };
 
-  const riskChartData = history.map((rec, idx) => ({
-    name: `T+${idx + 1}`,
-    "Risk Score": rec.risk_score,
-  }));
-
-  const approvalCounts = history.reduce((acc, rec) => {
-    acc[rec.approval_state] = (acc[rec.approval_state] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const approvalChartData = Object.entries(approvalCounts).map(([name, value]) => ({
-    name,
-    value,
-  }));
-
   return (
-    <main className="min-h-screen p-8 bg-slate-50 flex justify-center relative">
-      <div className="absolute top-6 right-8">
+    <main className="relative min-h-screen bg-slate-50 text-slate-900 font-sans overflow-x-hidden">
+      
+      {/* BLOOM UNICORN STUDIO BACKGROUND */}
+      <BloomBackground />
+
+      {/* Dev Mode Floating Button */}
+      <div className="fixed top-6 right-8 z-50">
         <button
           onClick={() => setIsDevMode(!isDevMode)}
-          className={`text-xs px-4 py-2 rounded-full border transition-all duration-300 font-medium ${
+          className={`text-xs px-4 py-2 rounded-full border transition-all duration-300 font-medium shadow-md ${
             isDevMode 
               ? "bg-slate-900 text-emerald-400 border-slate-700 shadow-inner" 
-              : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100 shadow-sm"
+              : "bg-white/90 backdrop-blur text-slate-700 border-slate-200 hover:bg-white"
           }`}
         >
           {isDevMode ? "🧠 Neural Trace: ACTIVE" : "Neural Trace: OFF"}
         </button>
       </div>
 
-      <div className="max-w-5xl w-full space-y-6 mt-8">
-        <div className="text-center mb-8">
-          <Title className="text-3xl font-bold text-slate-900">AI-CA Enterprise Intelligence Engine</Title>
-          <Text className="text-slate-500">Neuro-Symbolic Governance, ESG, Conversational Context & Rollbacks</Text>
-        </div>
+      {/* HERO BANNER CONTENT */}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-[45vh] text-center px-4 pt-20 pb-10">
+        <h1 className="text-5xl sm:text-7xl font-bold tracking-tighter text-slate-900 mb-4">
+          AI-CA Enterprise
+        </h1>
+        <p className="text-slate-600 max-w-xl text-sm sm:text-base font-medium">
+          Neuro-Symbolic Governance, ESG, Conversational Context & Treasury Optimization powered by autonomous intelligence.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-1">
-            <Title>Ingestion Portal</Title>
-            <div className="mt-4 flex flex-col space-y-4">
-              <div className="p-3 border-2 border-dashed border-slate-300 rounded-md bg-white">
+      {/* DASHBOARD WORKSPACE */}
+      <div className="relative z-10 max-w-5xl mx-auto w-full p-8 pb-24">
+        
+        {!result ? (
+          <Card className="bg-white/90 border-slate-200 backdrop-blur-md shadow-xl">
+            <Title className="text-slate-900">Document Ingestion</Title>
+            <div className="mt-4 flex flex-col md:flex-row gap-4 items-center">
+              <div className="flex-grow p-3 border-2 border-dashed border-slate-300 rounded-md bg-slate-50 w-full">
                 <input
                   type="file"
                   accept=".pdf"
                   onChange={handleFileChange}
-                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                  className="block w-full text-xs text-slate-600 file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                 />
               </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Live Policy Override</label>
-                <textarea 
-                  rows={2}
-                  className="w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 text-sm p-2 border"
-                  value={customPolicy}
-                  onChange={(e) => setCustomPolicy(e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-col space-y-2 pt-2">
-                <Button onClick={() => handleUpload(false)} disabled={loading} className="w-full bg-slate-600 hover:bg-slate-700 border-none text-xs">
+              <div className="flex space-x-2 w-full md:w-auto">
+                <Button onClick={() => handleUpload(false)} disabled={loading} className="w-full md:w-32 bg-slate-600 hover:bg-slate-700 border-none text-xs text-white">
                   Standard Audit
                 </Button>
-                <Button onClick={() => handleUpload(true)} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 border-none text-xs">
+                <Button onClick={() => handleUpload(true)} disabled={loading} className="w-full md:w-32 bg-blue-600 hover:bg-blue-700 border-none text-xs text-white">
                   Agentic Workflow
                 </Button>
               </div>
             </div>
             {loading && <Text className="mt-4 text-center text-blue-600 animate-pulse text-xs font-medium">Processing Telemetry...</Text>}
-            {error && <div className="mt-4 p-2 bg-red-50 text-red-700 rounded text-xs">{error}</div>}
+            {error && <div className="mt-4 p-2 bg-red-50 border border-red-200 text-red-700 rounded text-xs">{error}</div>}
           </Card>
-
-          <Card className="md:col-span-2">
-            <Title>Session Telemetry</Title>
-            <Text className="text-xs mb-4">Real-time risk trends & execution distribution.</Text>
-            
-            {history.length === 0 ? (
-              <div className="h-48 flex items-center justify-center border border-dashed border-slate-200 rounded">
-                <Text className="text-slate-400 text-sm">Awaiting first telemetry block...</Text>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Text className="text-xs font-bold mb-2">Risk Trend Analysis</Text>
-                  <LineChart
-                    className="h-48"
-                    data={riskChartData}
-                    index="name"
-                    categories={["Risk Score"]}
-                    colors={["red"]}
-                    yAxisWidth={30}
-                    showLegend={false}
-                    curveType="monotone"
-                  />
-                </div>
-                <div>
-                  <Text className="text-xs font-bold mb-2">Execution States</Text>
-                  <DonutChart
-                    className="h-48"
-                    data={approvalChartData}
-                    category="value"
-                    index="name"
-                    colors={["emerald", "orange", "red"]}
-                  />
-                </div>
-              </div>
-            )}
-          </Card>
-        </div>
+        ) : (
+          <div className="flex justify-between items-center bg-blue-50/90 border border-blue-200 backdrop-blur-md p-4 rounded-lg shadow-sm">
+            <div>
+              <Text className="text-xs text-blue-700 font-bold uppercase tracking-wider">Active Session Rendered</Text>
+              <Title className="text-slate-900 text-lg">Viewing Audit: {result.vendor_name}</Title>
+            </div>
+            <Button onClick={clearSession} className="bg-white text-blue-700 hover:bg-blue-50 border border-blue-200 shadow-sm text-xs">
+              Clear & Start New Audit
+            </Button>
+          </div>
+        )}
 
         {result && (
-          <div className="animate-fade-in-up space-y-6">
-            <Card>
+          <div className="animate-fade-in-up mt-6 space-y-6">
+            <Card className="bg-white/95 border-slate-200 backdrop-blur-md shadow-xl">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <Title className="text-2xl">{result.vendor_name}</Title>
+                  <Title className="text-2xl text-slate-900">{result.vendor_name}</Title>
                   <Text className="text-xs font-semibold text-slate-500 mt-1">RBAC Status: {result.status}</Text>
                 </div>
                 <div className="flex flex-col items-end space-y-2">
@@ -346,21 +277,20 @@ export default function Home() {
               </div>
               <Divider />
 
-              {/* Grid 1: Financial & Fraud */}
               <div className="grid grid-cols-2 gap-6 mb-6">
-                <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
                   <Text className="font-bold text-slate-900 uppercase tracking-wide text-xs">Financial Ledger</Text>
                   <div className="flex justify-between items-center">
                     <Text className="text-slate-600">Reported Total</Text>
-                    <Text className="font-mono font-medium">{getCurrencySymbol(result.currency)}{result.reported_total.toFixed(2)}</Text>
+                    <Text className="font-mono font-medium text-slate-900">{getCurrencySymbol(result.currency)}{result.reported_total.toFixed(2)}</Text>
                   </div>
                   <div className="flex justify-between items-center">
                     <Text className="text-slate-600">Engine Total</Text>
-                    <Text className="font-mono font-medium">{getCurrencySymbol(result.currency)}{result.calculated_total.toFixed(2)}</Text>
+                    <Text className="font-mono font-medium text-slate-900">{getCurrencySymbol(result.currency)}{result.calculated_total.toFixed(2)}</Text>
                   </div>
                 </div>
 
-                <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
                   <Text className="font-bold text-slate-900 uppercase tracking-wide text-xs">AML Fraud Radar</Text>
                   <div className="flex justify-between items-center">
                     <Text className="text-slate-600">Threat Index</Text>
@@ -373,22 +303,21 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Grid 2: ESG Scope 3 & Temporal Accruals */}
               <div className="grid grid-cols-2 gap-6 mb-6">
-                <div className="space-y-3 bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
+                <div className="space-y-3 bg-emerald-50/70 p-4 rounded-lg border border-emerald-200">
                   <Text className="font-bold text-emerald-900 uppercase tracking-wide text-xs">ESG Scope 3 Carbon Accounting</Text>
                   <div className="flex justify-between items-center">
                     <Text className="text-emerald-700">Total Estimated CO2e</Text>
-                    <Text className="font-mono font-bold text-emerald-900">{result.esg_metrics.total_co2} kg</Text>
+                    <Text className="font-mono font-bold text-emerald-950">{result.esg_metrics.total_co2} kg</Text>
                   </div>
-                  <div className="flex justify-between items-center text-xs text-emerald-600">
+                  <div className="flex justify-between items-center text-xs text-emerald-700">
                     <span>Hardware: {result.esg_metrics.hardware_co2}kg</span>
                     <span>Cloud: {result.esg_metrics.cloud_co2}kg</span>
                     <span>Travel: {result.esg_metrics.travel_co2}kg</span>
                   </div>
                 </div>
 
-                <div className="space-y-3 bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+                <div className="space-y-3 bg-blue-50/70 p-4 rounded-lg border border-blue-200">
                   <Text className="font-bold text-blue-900 uppercase tracking-wide text-xs">Temporal Accrual Engine</Text>
                   <div className="flex justify-between items-center">
                     <Text className="text-blue-700">Cadence Status</Text>
@@ -396,14 +325,25 @@ export default function Home() {
                       {result.temporal_accrual.accrual_status}
                     </Badge>
                   </div>
-                  <div className="flex justify-between items-center text-xs text-blue-600">
+                  <div className="flex justify-between items-center text-xs text-blue-700">
                     <span>Billing Cycle: {result.temporal_accrual.billing_cadence_days} Days</span>
                     <span>Next: {result.temporal_accrual.projected_next_billing}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Policy Violations */}
+              <div className="space-y-3 bg-purple-50/70 p-4 rounded-lg border border-purple-200 mb-6">
+                <Text className="font-bold text-purple-900 uppercase tracking-wide text-xs">Treasury Yield Optimizer</Text>
+                <div className="flex justify-between items-center">
+                  <Text className="text-purple-700">Recommended Action Plan</Text>
+                  <Badge color="purple">{result.treasury_optimization.recommendation}</Badge>
+                </div>
+                <div className="flex justify-between items-center mt-2 text-xs text-purple-800 font-medium">
+                  <span>Vendor Discount Terms: {result.treasury_optimization.discount_offered}</span>
+                  <span>Projected Net Benefit: {getCurrencySymbol(result.currency)}{result.treasury_optimization.projected_net_benefit.toFixed(2)}</span>
+                </div>
+              </div>
+
               <div className="space-y-2 mb-6">
                 <Text className="font-bold text-slate-900 uppercase tracking-wide text-xs">Policy Compliance</Text>
                 {result.policy_violations.length > 0 ? (
@@ -413,20 +353,19 @@ export default function Home() {
                     </ul>
                   </div>
                 ) : (
-                  <div className="p-3 bg-emerald-50 text-emerald-700 rounded-md text-sm border border-emerald-200 font-medium">
+                  <div className="p-3 bg-emerald-50 text-emerald-800 rounded-md text-sm border border-emerald-200 font-medium">
                     ✓ Clean Audit: Zero policy or ESG violations detected.
                   </div>
                 )}
               </div>
 
-              {/* MODULE 3: CONVERSATIONAL DOCUMENT-CHAT UI */}
               <Divider />
               <div className="space-y-3">
                 <Text className="font-bold text-slate-900 uppercase tracking-wide text-xs">Conversational Document Intelligence</Text>
                 <div className="p-4 bg-slate-900 rounded-xl space-y-3 shadow-inner">
-                  <div className="max-h-48 overflow-y-auto space-y-2 p-2 bg-black/40 rounded border border-slate-800">
+                  <div className="max-h-48 overflow-y-auto space-y-2 p-2 bg-black/60 rounded border border-slate-800">
                     {chatLog.map((msg, i) => (
-                      <div key={i} className={`text-xs p-2 rounded ${msg.sender === "AI" ? "bg-slate-800 text-slate-200" : "bg-blue-900/60 text-blue-200 text-right"}`}>
+                      <div key={i} className={`text-xs p-2 rounded ${msg.sender === "AI" ? "bg-slate-800 text-slate-200 border border-slate-700" : "bg-blue-900/70 text-blue-100 text-right border border-blue-800"}`}>
                         <span className="font-bold">{msg.sender}:</span> {msg.text}
                       </div>
                     ))}
@@ -441,24 +380,23 @@ export default function Home() {
                       onChange={(e) => setChatQuestion(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
                     />
-                    <Button onClick={handleSendChat} size="xs" className="bg-blue-600 hover:bg-blue-700 border-none">Send</Button>
+                    <Button onClick={handleSendChat} size="xs" className="bg-blue-600 hover:bg-blue-700 border-none text-white">Send</Button>
                   </div>
                 </div>
               </div>
 
-              {/* Agent Actions */}
               {result.payment_strategy !== "N/A" && (
                 <>
                   <Divider />
                   <div className="space-y-4">
                     <Text className="font-bold text-slate-900 uppercase tracking-wide text-xs">Autonomous Agent Actions</Text>
                     <div className="flex justify-between items-center p-3 bg-blue-50 border border-blue-200 rounded-md">
-                      <Text className="font-bold text-blue-900">Recommended Treasury Strategy</Text>
+                      <Text className="font-bold text-blue-900">Agent Applied Strategy</Text>
                       <Badge color="blue">{result.payment_strategy.replace(/_/g, " ")}</Badge>
                     </div>
 
                     {result.vendor_email_draft !== "N/A" && (
-                      <div className="mt-4 p-4 bg-slate-900 rounded-md shadow-inner relative">
+                      <div className="mt-4 p-4 bg-slate-900 rounded-md shadow-inner relative border border-slate-800">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-2">
                             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
@@ -466,7 +404,7 @@ export default function Home() {
                           </div>
                           <button 
                             onClick={() => handleReadAloud(result.vendor_email_draft)}
-                            className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1 rounded border border-slate-500"
+                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1 rounded border border-slate-700"
                           >
                             <span>▶ Listen</span>
                           </button>
@@ -480,7 +418,6 @@ export default function Home() {
                 </>
               )}
 
-              {/* MODULE 4: LEDGER ROLLBACK & REVERSING ENTRIES */}
               <Divider />
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -489,29 +426,29 @@ export default function Home() {
                     <input 
                       type="text" 
                       placeholder="Rollback Reason..."
-                      className="text-xs p-1 rounded border border-slate-300 w-40"
+                      className="text-xs p-1 rounded bg-white text-slate-900 border border-slate-300 w-40"
                       value={rollbackReason}
                       onChange={(e) => setRollbackReason(e.target.value)}
                     />
-                    <Button onClick={handleRollback} size="xs" className="bg-red-600 hover:bg-red-700 border-none text-[10px]">
-                      Execute Rollback (Reversing Entry)
+                    <Button onClick={handleRollback} size="xs" className="bg-red-600 hover:bg-red-700 border-none text-[10px] text-white">
+                      Execute Rollback
                     </Button>
                   </div>
                 </div>
-                {rollbackMsg && <Text className="text-xs text-emerald-600 font-medium">{rollbackMsg}</Text>}
+                {rollbackMsg && <Text className="text-xs text-emerald-700 font-medium">{rollbackMsg}</Text>}
 
                 <div className="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-6 p-6 bg-slate-100 rounded-xl border border-slate-200">
                   <div className="w-full md:w-5/12 bg-white border-2 border-dashed border-slate-300 rounded-lg p-3 text-center">
                     <Text className="text-[10px] font-bold text-slate-400 uppercase">Block N-1</Text>
                     <div className="bg-slate-50 p-2 rounded mt-1">
-                      <Text className="font-mono text-xs text-slate-500 truncate">{result.prev_hash}</Text>
+                      <Text className="font-mono text-xs text-slate-600 truncate">{result.prev_hash}</Text>
                     </div>
                   </div>
-                  <div className="w-full md:w-5/12 bg-white border-2 border-emerald-400 rounded-lg p-3 text-center relative overflow-hidden">
+                  <div className="w-full md:w-5/12 bg-white border-2 border-emerald-500 rounded-lg p-3 text-center relative overflow-hidden shadow-sm">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-blue-500"></div>
-                    <Text className="text-[10px] font-bold text-emerald-600 uppercase mt-1">Block N (Sealed)</Text>
-                    <div className="bg-emerald-50 p-2 rounded mt-1">
-                      <Text className="font-mono text-xs text-slate-800 truncate">{result.block_hash}</Text>
+                    <Text className="text-[10px] font-bold text-emerald-700 uppercase mt-1">Block N (Sealed)</Text>
+                    <div className="bg-emerald-50/50 p-2 rounded mt-1">
+                      <Text className="font-mono text-xs text-slate-900 truncate">{result.block_hash}</Text>
                     </div>
                   </div>
                 </div>
@@ -522,7 +459,7 @@ export default function Home() {
               <Card className="bg-slate-900 border-slate-800 animate-fade-in-up">
                 <div className="flex items-center space-x-2 mb-4">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                  <Title className="text-slate-200 text-sm tracking-widest uppercase">Raw Telemetry & ESG Payload</Title>
+                  <Title className="text-slate-200 text-sm tracking-widest uppercase">Raw Telemetry & Treasury Payload</Title>
                 </div>
                 <Divider className="border-slate-800" />
                 <div className="bg-black p-4 rounded text-xs text-emerald-400 font-mono overflow-x-auto shadow-inner">
