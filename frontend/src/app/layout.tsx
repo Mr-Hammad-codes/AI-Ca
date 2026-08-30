@@ -1,29 +1,33 @@
 import "./globals.css";
-import Link from "next/link";
-import { AuditProvider } from "./context";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "AI-CA Enterprise",
-  description: "Neuro-Symbolic Governance",
+  description: "Neuro-Symbolic Governance & Autonomous Audit",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en">
-      <body className="bg-slate-50 text-slate-900">
-        <AuditProvider>
-          {/* Global Enterprise Navigation */}
-          <nav className="bg-slate-900 text-slate-200 px-8 py-4 flex justify-between items-center shadow-md">
-            <div className="font-bold text-lg tracking-widest text-emerald-400">AI-CA ENGINE</div>
-            <div className="flex space-x-6 text-sm font-medium">
-              <Link href="/" className="hover:text-emerald-400 transition-colors">Audit Console</Link>
-              <Link href="/analytics" className="hover:text-emerald-400 transition-colors">Telemetry</Link>
-              <Link href="/settings" className="hover:text-emerald-400 transition-colors">Governance Policies</Link>
-            </div>
-          </nav>
-          
-          {children}
-        </AuditProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className="bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-500 antialiased">
+        
+        {/* SINGLE THEMED NAVBAR (No Context Conflicts) */}
+        <nav className="border-b border-[var(--border)] bg-[var(--bg-secondary)] px-8 py-4 flex justify-between items-center sticky top-0 z-40 shadow-sm transition-colors duration-500">
+          <div className="font-bold text-lg tracking-widest uppercase">
+            AI-CA <span className="text-[var(--accent)]">Engine</span>
+          </div>
+          <div className="hidden md:flex space-x-8 text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+            <span className="hover:text-[var(--accent)] cursor-pointer transition-colors">Audit Console</span>
+            <span className="hover:text-[var(--accent)] cursor-pointer transition-colors">Telemetry</span>
+            <span className="hover:text-[var(--accent)] cursor-pointer transition-colors">Governance Policies</span>
+          </div>
+        </nav>
+
+        {children}
       </body>
     </html>
   );

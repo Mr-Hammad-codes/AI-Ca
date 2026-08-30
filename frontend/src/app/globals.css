@@ -1,12 +1,45 @@
 @import "tailwindcss";
 
-/* Fallback for older Tailwind versions if the import above warns */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+:root {
+  /* LIGHT THEME (White Beige & Brandy Rose) */
+  --bg-primary: #F6F5EC;     
+  --bg-secondary: #EFE7DA;   
+  --border: #E1DACA;         
+  --accent: #B29079;         
+  --text-primary: #110F0E;   
+  --text-secondary: #67635F; 
+  --badge-bg: #E1DACA;       
+  
+  /* Semantic Colors */
+  --danger-bg: #FEE2E2;
+  --danger-border: #FCA5A5;
+  --danger-text: #991B1B;
+  --success-bg: #ECFDF5;
+  --success-border: #A7F3D0;
+  --success-text: #065F46;
+}
+
+.dark {
+  /* DARK THEME (Black Aura & Seal Brown) */
+  --bg-primary: #110F0E;     
+  --bg-secondary: #313130;   
+  --border: #67635F;         
+  --accent: #562508;         
+  --text-primary: #E2DBCA;   
+  --text-secondary: #C1B6A4; 
+  --badge-bg: #313130;       
+
+  /* Semantic Colors */
+  --danger-bg: #450A0A;
+  --danger-border: #7F1D1D;
+  --danger-text: #FCA5A5;
+  --success-bg: #064E3B;
+  --success-border: #065F46;
+  --success-text: #6EE7B7;
+}
 
 body {
-  /* Hex codes for Tailwind's slate-50 and slate-900 */
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.5s ease, color 0.5s ease;
 }

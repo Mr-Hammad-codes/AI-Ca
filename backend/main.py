@@ -112,14 +112,13 @@ def compute_temporal_accrual(vendor_name: str, reported_total: float) -> dict:
 
 # --- MODULE 5: DYNAMIC DISCOUNTING & YIELD OPTIMIZER ---
 def optimize_treasury_yield(vendor_name: str, reported_total: float) -> dict:
-    # Simulated vendor discount terms (e.g., 2% discount if paid in 10 days, otherwise Net 30)
     terms = {"discount_percent": 0.0, "discount_days": 0, "net_days": 30}
     if "dell" in vendor_name.lower() or "apex" in vendor_name.lower():
         terms = {"discount_percent": 2.0, "discount_days": 10, "net_days": 30}
     elif "aws" in vendor_name.lower():
         terms = {"discount_percent": 1.5, "discount_days": 15, "net_days": 45}
 
-    corporate_apy = 0.05 # Baseline 5% annual interest on corporate cash reserves
+    corporate_apy = 0.05 
     
     if terms["discount_percent"] > 0:
         discount_value = reported_total * (terms["discount_percent"] / 100)
@@ -217,20 +216,35 @@ async def process_invoice(
             active_policy += f"\n\n--- URGENT OVERRIDE: DYNAMIC POLICY UPDATE ---\n{custom_policy}"
         
         prompt = f"""
-        You are an enterprise AI auditor. Analyze this invoice against the provided corporate policy.
-        CORPORATE POLICY:
-        {active_policy}
-        Extract the following fields strictly as a JSON object:
+You are an elite Enterprise AI Financial Auditor. Your task is to extract data from the provided invoice text and rigorously audit it against the active corporate policy.
+
+CORPORATE POLICY:
+{active_policy}
+
+INSTRUCTIONS:
+1. Extract the vendor name, currency, line items, tax, and total amount accurately.
+2. Mathematical Verification: Calculate the sum of line items plus tax and verify it matches the stated total amount.
+3. Policy Audit: Cross-reference every line item and the total against the CORPORATE POLICY. 
+4. Violation Specificity: If a policy is violated, provide a HIGHLY DETAILED string in the 'policy_violations' array. State exactly what was violated, the invoice value, and the policy rule. (e.g., "The laptop purchase of 5,000 exceeds the 3,000 maximum limit stipulated in the IT Hardware Policy.")
+
+Extract and return the following fields strictly as a JSON object:
+{{
+    "vendor_name": "string (Extract exactly as written)",
+    "currency": "string (Extract the 3-letter currency code, e.g., INR, USD, EUR, GBP)",
+    "line_items": [
         {{
-            "vendor_name": "string",
-            "currency": "INR",
-            "line_items": [{{"description": "string", "amount": float}}],
-            "tax_amount": float,
-            "total_amount": float,
-            "policy_violations": ["string"]
+            "description": "string (Item name and details)",
+            "amount": float (Numeric value only)
         }}
-        Return ONLY the JSON.
-        """
+    ],
+    "tax_amount": float (Use 0.0 if no tax is found),
+    "total_amount": float,
+    "policy_violations": ["string (Detailed explanation of each violation)"]
+}}
+
+CRITICAL REQUIREMENT: 
+Return ONLY the raw JSON object. Do NOT wrap the response in markdown tags. Do NOT include any conversational text before or after the JSON.
+"""
         
         max_retries = 3
         response = None
@@ -332,27 +346,27 @@ async def process_invoice(
 
             if not final_compliant:
                 remediation_prompt = f"""
-                Write a polite, professional email to the vendor '{vendor_name}'.
-                The invoice submitted (Total: {currency} {reported_total}) was flagged.
-                Reasons: {violations}, {fraud_flags}, PO Status: {po_status}.
-                Instruct them to correct and resubmit. Sign off as 'AI-CA Autonomous Audit Engine'.
-                Return ONLY the email body.
-                """
-                
-                email_success = False
-                if groq_client:
-                    try:
-                        chat_completion = groq_client.chat.completions.create(
-                            messages=[{"role": "user", "content": remediation_prompt}],
-                            model="llama3-8b-8192", 
-                        )
-                        vendor_email_draft = chat_completion.choices[0].message.content.strip()
-                        email_success = True
-                    except Exception:
-                        pass
+Write a highly detailed, comprehensive 3-paragraph professional email to '{vendor_name}'.
+The invoice (Total: {currency} {reported_total}) was rejected by the autonomous audit system.
 
-                if not email_success:
-                    vendor_email_draft = f"Dear {vendor_name},\nYour invoice ({currency} {reported_total}) was flagged. Please review and correct."
+Policy Violations: {violations}
+Fraud Flags: {fraud_flags}
+PO Status: {po_status}
+
+INSTRUCTIONS:
+1. Paragraph 1: State clearly that the invoice was flagged.
+2. Paragraph 2: Explain EXACTLY what policies were violated and why the fraud flags were triggered using the data provided.
+3. Paragraph 3: Provide strict instructions on how to correct the invoice and resubmit. 
+Sign off as 'AI-CA Autonomous Audit Engine'. Return ONLY the email body text. Do not use markdown blocks.
+"""
+                try:
+                    email_response = ai_client.models.generate_content(
+                        model='gemini-3.6-flash',
+                        contents=[remediation_prompt]
+                    )
+                    vendor_email_draft = email_response.text.strip()
+                except Exception as e:
+                    vendor_email_draft = f"Error generating report: {str(e)}" 
 
         prev_hash = get_latest_block_hash()
         timestamp = datetime.utcnow().isoformat()
